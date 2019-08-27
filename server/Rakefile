@@ -1,0 +1,75 @@
+begin
+  require_relative '.env'
+rescue LoadError
+  abort "\n.env.rb file does not exist. Please add it.\n\n"
+end
+
+require 'rubygems'
+require 'bundler/setup'
+Bundler.require(:default)
+
+# --------------- USAGE --------------- #
+# Migrate database to latest version    #
+# rake db:migrate                       #
+#                                       #
+# Migrate database to specific version  #
+# rake db:migrate[3]                    #
+#                                       #
+# To seed the DB                        #
+# rake db:seed                          #
+#                                       #
+# To reset the migrations & seed DB     #
+# rake db:Reset                         #
+#                                       #
+# Open irb                              #
+# rake irb                              #
+#                                       #
+# To start the server in development    #
+# rake server:dev                       #
+# ------------------------------------- #
+
+namespace :db do
+  migrate = lambda do |version|
+    puts "===== #{version} ====="
+    DB = Sequel.connect(ENV['DB_URL'])
+    require 'logger'
+    Sequel.extension :migration
+    DB.loggers << Logger.new($stdout) if DB.loggers.empty?
+    Sequel::Migrator.apply(DB, 'migrate', version)
+  end
+
+  desc "Run migrations"
+  task :migrate, [:version] do |t, args|
+    version = args[:version].to_i if args[:version]
+    migrate.call(version)
+  end
+
+  desc "Seed database"
+  task :seed do
+    system("ruby db/seeds/users_table_seeder.rb")
+  end
+
+  desc "Reset migrations and seed the database"
+  task :reset do
+    # Rake::Task['db:migrate'].invoke(0)
+    # Rake::Task['db:migrate'].reenable
+    # Rake::Task['db:migrate'].invoke
+    migrate.call(0)
+    migrate.call(nil)
+    Rake::Task['db:seed'].invoke
+  end
+end
+
+# Server
+namespace :server do
+  desc "run app via thin in development"
+  task :dev do
+    system("thin -R config.ru -p #{ENV['PORT']} -e #{ENV['RACK_ENV']} start")
+  end
+end
+
+# Shell
+desc "Open irb shell"
+task :irb do 
+  sh "irb -r ./models"
+end
